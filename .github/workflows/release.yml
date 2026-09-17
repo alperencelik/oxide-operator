@@ -77,3 +77,40 @@ jobs:
             dist/install.yaml
             dist/oxide-operator-*.tgz
           generate_release_notes: true
+
+  # Mirror the chart into alperencelik/helm-charts, whose own chart-releaser publishes it to
+  # https://alperencelik.github.io/helm-charts. Separate from the release job so a missing or
+  # expired RELEASE_TOKEN can be fixed and re-run without redoing the image and the release.
+  sync-chart:
+    needs: release
+    name: Sync chart to helm-charts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Clone helm-charts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.repository_owner }}/helm-charts
+          token: ${{ secrets.RELEASE_TOKEN }}
+          path: helm-charts
+
+      - name: Copy chart and push
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          dest=helm-charts/charts/oxide-operator
+          rm -rf "$dest"
+          cp -R charts/oxide-operator "$dest"
+          # chart-releaser packages from Chart.yaml, so the tag version has to land in the file
+          # rather than being passed to helm package as it is for the OCI push.
+          sed -i "s/^version: .*/version: $version/; s/^appVersion: .*/appVersion: \"$version\"/" "$dest/Chart.yaml"
+          cd helm-charts
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add charts/oxide-operator
+          git diff --staged --quiet && echo "Chart unchanged, nothing to push." && exit 0
+          git commit -m "feat: update oxide-operator chart to $version"
+          git push
