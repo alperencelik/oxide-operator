@@ -1,0 +1,16 @@
+apiVersion: v2
+name: oxide-operator
+description: A Kubernetes operator for Oxide racks
+type: application
+home: https://github.com/alperencelik/oxide-operator
+sources:
+  - https://github.com/alperencelik/oxide-operator
+keywords:
+  - oxide
+  - operator
+maintainers:
+  - name: alperencelik
+    url: https://github.com/alperencelik
+# Both are overwritten with the git tag by the release workflow.
+version: 0.1.0
+appVersion: "0.1.0"

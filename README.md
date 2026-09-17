@@ -22,6 +22,19 @@ All resources live in `oxide.100vms.com/v1alpha1`.
 The Kubernetes object name is the Oxide resource name, so it must be a valid Oxide name
 (lowercase letters, digits and `-`, starting with a letter, at most 63 characters).
 
+## Install
+
+```sh
+helm install oxide-operator oci://ghcr.io/alperencelik/charts/oxide-operator \
+  --namespace oxide-operator-system --create-namespace
+```
+
+Or apply the manifest attached to a [release](https://github.com/alperencelik/oxide-operator/releases):
+
+```sh
+kubectl apply -f https://github.com/alperencelik/oxide-operator/releases/latest/download/install.yaml
+```
+
 ## Quick start
 
 See [docs/quick-start.md](docs/quick-start.md).

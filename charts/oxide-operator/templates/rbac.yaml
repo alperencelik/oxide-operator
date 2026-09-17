@@ -1,0 +1,138 @@
+{{/* ponytail: rules mirror config/rbac/role.yaml and leader_election_role.yaml. Re-copy them
+     when a new kind or kubebuilder RBAC marker is added. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "oxide-operator.fullname" . }}-manager
+  labels:
+    {{- include "oxide-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+- apiGroups:
+  - oxide.100vms.com
+  resources:
+  - disks
+  - images
+  - instances
+  - instancesets
+  - oxideconnections
+  - projects
+  - snapshots
+  - vpcs
+  - vpcsubnets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - oxide.100vms.com
+  resources:
+  - disks/finalizers
+  - images/finalizers
+  - instances/finalizers
+  - instancesets/finalizers
+  - oxideconnections/finalizers
+  - projects/finalizers
+  - snapshots/finalizers
+  - vpcs/finalizers
+  - vpcsubnets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - oxide.100vms.com
+  resources:
+  - disks/status
+  - images/status
+  - instances/status
+  - instancesets/status
+  - oxideconnections/status
+  - projects/status
+  - snapshots/status
+  - vpcs/status
+  - vpcsubnets/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "oxide-operator.fullname" . }}-manager
+  labels:
+    {{- include "oxide-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "oxide-operator.fullname" . }}-manager
+subjects:
+- kind: ServiceAccount
+  name: {{ include "oxide-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- if .Values.leaderElect }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "oxide-operator.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxide-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "oxide-operator.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxide-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "oxide-operator.fullname" . }}-leader-election
+subjects:
+- kind: ServiceAccount
+  name: {{ include "oxide-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
