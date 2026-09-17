@@ -83,6 +83,8 @@ jobs:
   # expired RELEASE_TOKEN can be fixed and re-run without redoing the image and the release.
   sync-chart:
     needs: release
+    permissions:
+      contents: read
     name: Sync chart to helm-charts
     runs-on: ubuntu-latest
     steps:
