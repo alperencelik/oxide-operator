@@ -1,0 +1,10 @@
+apiVersion: oxide.100vms.com/v1alpha1
+kind: VpcSubnet
+metadata:
+  name: demo-subnet
+spec:
+  connectionRef:
+    name: oxide
+  project: demo
+  vpc: demo-vpc
+  ipv4Block: 172.30.10.0/24

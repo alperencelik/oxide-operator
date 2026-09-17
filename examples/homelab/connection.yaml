@@ -1,0 +1,11 @@
+# Create the token Secret first:
+#   kubectl create secret generic oxide-home-token -n default --from-file=token=<path-to-token>
+apiVersion: oxide.100vms.com/v1alpha1
+kind: OxideConnection
+metadata:
+  name: oxide-home
+spec:
+  host: http://192.168.0.22
+  tokenSecretRef:
+    name: oxide-home-token
+    namespace: default

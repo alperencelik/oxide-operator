@@ -1,0 +1,8 @@
+apiVersion: oxide.100vms.com/v1alpha1
+kind: Project
+metadata:
+  name: demo
+spec:
+  connectionRef:
+    name: oxide
+  description: Managed by oxide-operator

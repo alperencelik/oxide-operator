@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oxide-token
+  namespace: default
+stringData:
+  token: replace-with-an-oxide-api-token
+---
+apiVersion: oxide.100vms.com/v1alpha1
+kind: OxideConnection
+metadata:
+  name: oxide
+spec:
+  host: https://oxide.sys.example.com
+  tokenSecretRef:
+    name: oxide-token
+    namespace: default

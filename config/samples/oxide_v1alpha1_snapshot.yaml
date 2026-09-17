@@ -1,0 +1,9 @@
+apiVersion: oxide.100vms.com/v1alpha1
+kind: Snapshot
+metadata:
+  name: demo-data-snap
+spec:
+  connectionRef:
+    name: oxide
+  project: demo
+  disk: demo-data

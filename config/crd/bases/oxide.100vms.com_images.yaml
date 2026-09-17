@@ -1,0 +1,259 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: images.oxide.100vms.com
+spec:
+  group: oxide.100vms.com
+  names:
+    kind: Image
+    listKind: ImageList
+    plural: images
+    shortNames:
+    - oximg
+    singular: image
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.project
+      name: Project
+      type: string
+    - jsonPath: .spec.os
+      name: OS
+      type: string
+    - jsonPath: .spec.version
+      name: Version
+      type: string
+    - jsonPath: .status.size
+      name: Size
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Image is the Schema for the images API. The object name is the
+          Oxide image name.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ImageSpec defines the desired state of an Oxide image.
+            properties:
+              blockSize:
+                default: 512
+                description: BlockSize in bytes of an image imported from url.
+                enum:
+                - 512
+                - 2048
+                - 4096
+                type: integer
+              connectionRef:
+                description: ConnectionRef is the name of the cluster-scoped OxideConnection
+                  to use.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              deletionProtection:
+                description: DeletionProtection keeps the Oxide resource when the
+                  Kubernetes object is deleted.
+                type: boolean
+              description:
+                description: Description of the image. Applied at creation.
+                type: string
+              name:
+                description: |-
+                  Name is the Oxide name of the resource. Defaults to the object name; set it when objects
+                  in different namespaces would otherwise map to the same Oxide resource.
+                pattern: ^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$
+                type: string
+                x-kubernetes-validations:
+                - message: name is immutable
+                  rule: self == oldSelf
+              os:
+                description: OS is the operating system family, e.g. debian. Applied
+                  at creation.
+                type: string
+              project:
+                description: Project is the name or ID of the Oxide project.
+                type: string
+                x-kubernetes-validations:
+                - message: project is immutable
+                  rule: self == oldSelf
+              projectRef:
+                description: ProjectRef references a Project in the same namespace.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: projectRef is immutable
+                  rule: self == oldSelf
+              promote:
+                description: Promote makes the image available to every project in
+                  the silo. Requires silo admin.
+                type: boolean
+              sha256:
+                description: SHA256 is the expected hex SHA-256 digest of the file
+                  at url. The import fails on a mismatch.
+                pattern: ^[a-f0-9]{64}$
+                type: string
+              snapshot:
+                description: Snapshot is the name or ID of a snapshot to create the
+                  image from.
+                type: string
+                x-kubernetes-validations:
+                - message: snapshot is immutable
+                  rule: self == oldSelf
+              url:
+                description: |-
+                  URL of a raw disk image to import. It's written to a temporary disk that is snapshotted,
+                  and the image is created from the snapshot. The disk and snapshot are then deleted.
+                pattern: ^https?://
+                type: string
+                x-kubernetes-validations:
+                - message: url is immutable
+                  rule: self == oldSelf
+              version:
+                description: Version is the operating system version, e.g. 12. Applied
+                  at creation.
+                type: string
+            required:
+            - connectionRef
+            - os
+            - version
+            type: object
+            x-kubernetes-validations:
+            - message: exactly one of url or snapshot is required
+              rule: has(self.url) != has(self.snapshot)
+            - message: exactly one of project or projectRef must be set
+              rule: has(self.project) != has(self.projectRef)
+            - message: name is immutable
+              rule: has(self.name) == has(oldSelf.name)
+            - message: project is immutable
+              rule: has(self.projectRef) == has(oldSelf.projectRef)
+          status:
+            description: ImageStatus defines the observed state of Image.
+            properties:
+              conditions:
+                description: Conditions describe the current state of the resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              id:
+                description: ID is the Oxide ID of the resource.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the last generation reconciled
+                  successfully.
+                format: int64
+                type: integer
+              size:
+                anyOf:
+                - type: integer
+                - type: string
+                description: Size of the image.
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: 'name must be a valid Oxide name: lowercase letters, digits and
+            ''-'', starting with a letter, at most 63 characters'
+          rule: has(self.spec.name) || self.metadata.name.matches('^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$')
+    served: true
+    storage: true
+    subresources:
+      status: {}

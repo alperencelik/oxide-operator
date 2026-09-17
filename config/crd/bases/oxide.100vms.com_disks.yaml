@@ -1,0 +1,242 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: disks.oxide.100vms.com
+spec:
+  group: oxide.100vms.com
+  names:
+    kind: Disk
+    listKind: DiskList
+    plural: disks
+    shortNames:
+    - oxd
+    singular: disk
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.project
+      name: Project
+      type: string
+    - jsonPath: .spec.size
+      name: Size
+      type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Disk is the Schema for the disks API. The object name is the
+          Oxide disk name.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DiskSpec defines the desired state of an Oxide disk.
+            properties:
+              blockSize:
+                default: 2048
+                description: BlockSize of a blank disk in bytes.
+                enum:
+                - 512
+                - 2048
+                - 4096
+                type: integer
+              connectionRef:
+                description: ConnectionRef is the name of the cluster-scoped OxideConnection
+                  to use.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              deletionProtection:
+                description: DeletionProtection keeps the Oxide resource when the
+                  Kubernetes object is deleted.
+                type: boolean
+              description:
+                description: Description of the disk. Applied at creation.
+                type: string
+              image:
+                description: Image is the name or ID of an image to create the disk
+                  from.
+                type: string
+                x-kubernetes-validations:
+                - message: image is immutable
+                  rule: self == oldSelf
+              name:
+                description: |-
+                  Name is the Oxide name of the resource. Defaults to the object name; set it when objects
+                  in different namespaces would otherwise map to the same Oxide resource.
+                pattern: ^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$
+                type: string
+                x-kubernetes-validations:
+                - message: name is immutable
+                  rule: self == oldSelf
+              project:
+                description: Project is the name or ID of the Oxide project.
+                type: string
+                x-kubernetes-validations:
+                - message: project is immutable
+                  rule: self == oldSelf
+              projectRef:
+                description: ProjectRef references a Project in the same namespace.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: projectRef is immutable
+                  rule: self == oldSelf
+              size:
+                anyOf:
+                - type: integer
+                - type: string
+                description: Size of the disk, e.g. 20Gi.
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+                x-kubernetes-validations:
+                - message: size is immutable
+                  rule: self == oldSelf
+              snapshot:
+                description: Snapshot is the name or ID of a snapshot to create the
+                  disk from.
+                type: string
+                x-kubernetes-validations:
+                - message: snapshot is immutable
+                  rule: self == oldSelf
+            required:
+            - connectionRef
+            - size
+            type: object
+            x-kubernetes-validations:
+            - message: image and snapshot are mutually exclusive
+              rule: '!(has(self.image) && has(self.snapshot))'
+            - message: exactly one of project or projectRef must be set
+              rule: has(self.project) != has(self.projectRef)
+            - message: name is immutable
+              rule: has(self.name) == has(oldSelf.name)
+            - message: project is immutable
+              rule: has(self.projectRef) == has(oldSelf.projectRef)
+          status:
+            description: DiskStatus defines the observed state of Disk.
+            properties:
+              conditions:
+                description: Conditions describe the current state of the resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              id:
+                description: ID is the Oxide ID of the resource.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the last generation reconciled
+                  successfully.
+                format: int64
+                type: integer
+              state:
+                description: State is the Oxide disk state, e.g. detached or attached.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: 'name must be a valid Oxide name: lowercase letters, digits and
+            ''-'', starting with a letter, at most 63 characters'
+          rule: has(self.spec.name) || self.metadata.name.matches('^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$')
+    served: true
+    storage: true
+    subresources:
+      status: {}

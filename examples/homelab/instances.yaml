@@ -1,0 +1,17 @@
+apiVersion: oxide.100vms.com/v1alpha1
+kind: Instance
+metadata:
+  name: debian-0
+  namespace: default
+spec:
+  connectionRef:
+    name: oxide-home
+  project: home
+  description: First VM on the home rack, managed by oxide-operator
+  ncpus: 2
+  memory: 2Gi
+  bootDisk:
+    image: debian-12
+    size: 6Gi
+  externalIPs:
+  - type: Ephemeral

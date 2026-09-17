@@ -1,0 +1,31 @@
+apiVersion: oxide.100vms.com/v1alpha1
+kind: Vpc
+metadata:
+  name: demo-vpc
+spec:
+  connectionRef:
+    name: oxide
+  project: demo
+  description: Demo VPC
+  firewallRules:
+  - name: allow-ssh
+    action: allow
+    direction: inbound
+    priority: 100
+    targets:
+    - type: vpc
+      value: demo-vpc
+    filters:
+      ports: ["22"]
+      protocols: [tcp]
+  - name: allow-internal
+    action: allow
+    direction: inbound
+    priority: 200
+    targets:
+    - type: vpc
+      value: demo-vpc
+    filters:
+      hosts:
+      - type: vpc
+        value: demo-vpc

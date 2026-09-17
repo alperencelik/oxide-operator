@@ -1,0 +1,17 @@
+# The image already exists on the rack, so applying this adopts it without importing.
+# On a fresh rack it's imported from the url.
+apiVersion: oxide.100vms.com/v1alpha1
+kind: Image
+metadata:
+  name: debian-12
+  namespace: default
+spec:
+  connectionRef:
+    name: oxide-home
+  projectRef:
+    name: home
+  description: Debian 12 (bookworm) genericcloud
+  os: Debian
+  version: "12"
+  url: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.raw
+  promote: true

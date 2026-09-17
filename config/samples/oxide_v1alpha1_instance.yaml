@@ -1,0 +1,22 @@
+apiVersion: oxide.100vms.com/v1alpha1
+kind: Instance
+metadata:
+  name: demo-instance
+spec:
+  connectionRef:
+    name: oxide
+  project: demo
+  ncpus: 2
+  memory: 2Gi
+  bootDisk:
+    size: 10Gi
+    # image: ubuntu-24.04
+  disks:
+  - demo-data
+  networkInterfaces:
+  - name: net0
+    vpc: demo-vpc
+    subnet: demo-subnet
+  userData: |
+    #cloud-config
+    hostname: demo-instance

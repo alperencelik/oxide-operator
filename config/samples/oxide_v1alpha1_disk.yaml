@@ -1,0 +1,9 @@
+apiVersion: oxide.100vms.com/v1alpha1
+kind: Disk
+metadata:
+  name: demo-data
+spec:
+  connectionRef:
+    name: oxide
+  project: demo
+  size: 10Gi

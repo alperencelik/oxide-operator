@@ -1,0 +1,328 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: vpcs.oxide.100vms.com
+spec:
+  group: oxide.100vms.com
+  names:
+    kind: Vpc
+    listKind: VpcList
+    plural: vpcs
+    shortNames:
+    - oxvpc
+    singular: vpc
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.project
+      name: Project
+      type: string
+    - jsonPath: .status.id
+      name: ID
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Vpc is the Schema for the vpcs API. The object name is the Oxide
+          VPC name.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: VpcSpec defines the desired state of an Oxide VPC.
+            properties:
+              connectionRef:
+                description: ConnectionRef is the name of the cluster-scoped OxideConnection
+                  to use.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              deletionProtection:
+                description: DeletionProtection keeps the Oxide resource when the
+                  Kubernetes object is deleted.
+                type: boolean
+              description:
+                description: Description of the VPC.
+                type: string
+              dnsName:
+                description: DNSName defaults to the object name.
+                type: string
+              firewallRules:
+                description: |-
+                  FirewallRules replaces all of the VPC's firewall rules when set, including the
+                  defaults Oxide creates. Leave unset to manage rules outside Kubernetes.
+                  Values mirror the Oxide API.
+                items:
+                  description: FirewallRule is a VPC firewall rule.
+                  properties:
+                    action:
+                      description: Action taken on matching traffic.
+                      enum:
+                      - allow
+                      - deny
+                      type: string
+                    description:
+                      description: Description of the rule.
+                      type: string
+                    direction:
+                      description: Direction of matching traffic.
+                      enum:
+                      - inbound
+                      - outbound
+                      type: string
+                    filters:
+                      description: Filters narrow the traffic the rule matches.
+                      properties:
+                        hosts:
+                          description: Hosts limits the rule to traffic to or from
+                            these hosts.
+                          items:
+                            description: FirewallTarget identifies a VPC, subnet,
+                              instance, IP or IP network.
+                            properties:
+                              type:
+                                description: Type of the target.
+                                enum:
+                                - vpc
+                                - subnet
+                                - instance
+                                - ip
+                                - ip_net
+                                type: string
+                              value:
+                                description: Value is a name for vpc, subnet and instance,
+                                  an address for ip, or a CIDR for ip_net.
+                                type: string
+                            required:
+                            - type
+                            - value
+                            type: object
+                          type: array
+                        ports:
+                          description: Ports are port numbers or ranges, e.g. 22 or
+                            8000-8080.
+                          items:
+                            type: string
+                          type: array
+                        protocols:
+                          description: Protocols to match.
+                          items:
+                            enum:
+                            - tcp
+                            - udp
+                            - icmp
+                            - icmp6
+                            type: string
+                          type: array
+                      type: object
+                    name:
+                      description: Name of the rule.
+                      type: string
+                    priority:
+                      description: Priority of the rule; lower values win.
+                      maximum: 65535
+                      minimum: 0
+                      type: integer
+                    status:
+                      default: enabled
+                      description: Status enables or disables the rule.
+                      enum:
+                      - enabled
+                      - disabled
+                      type: string
+                    targets:
+                      description: Targets are the VPC resources the rule applies
+                        to.
+                      items:
+                        description: FirewallTarget identifies a VPC, subnet, instance,
+                          IP or IP network.
+                        properties:
+                          type:
+                            description: Type of the target.
+                            enum:
+                            - vpc
+                            - subnet
+                            - instance
+                            - ip
+                            - ip_net
+                            type: string
+                          value:
+                            description: Value is a name for vpc, subnet and instance,
+                              an address for ip, or a CIDR for ip_net.
+                            type: string
+                        required:
+                        - type
+                        - value
+                        type: object
+                      type: array
+                  required:
+                  - action
+                  - direction
+                  - name
+                  - priority
+                  - targets
+                  type: object
+                type: array
+              ipv6Prefix:
+                description: IPv6Prefix is the VPC's IPv6 /48. Assigned by Oxide if
+                  unset.
+                type: string
+                x-kubernetes-validations:
+                - message: ipv6Prefix is immutable
+                  rule: self == oldSelf
+              name:
+                description: |-
+                  Name is the Oxide name of the resource. Defaults to the object name; set it when objects
+                  in different namespaces would otherwise map to the same Oxide resource.
+                pattern: ^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$
+                type: string
+                x-kubernetes-validations:
+                - message: name is immutable
+                  rule: self == oldSelf
+              project:
+                description: Project is the name or ID of the Oxide project.
+                type: string
+                x-kubernetes-validations:
+                - message: project is immutable
+                  rule: self == oldSelf
+              projectRef:
+                description: ProjectRef references a Project in the same namespace.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: projectRef is immutable
+                  rule: self == oldSelf
+            required:
+            - connectionRef
+            type: object
+            x-kubernetes-validations:
+            - message: exactly one of project or projectRef must be set
+              rule: has(self.project) != has(self.projectRef)
+            - message: name is immutable
+              rule: has(self.name) == has(oldSelf.name)
+            - message: project is immutable
+              rule: has(self.projectRef) == has(oldSelf.projectRef)
+          status:
+            description: ResourceStatus holds the status fields shared by every Oxide-backed
+              resource.
+            properties:
+              conditions:
+                description: Conditions describe the current state of the resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              id:
+                description: ID is the Oxide ID of the resource.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the last generation reconciled
+                  successfully.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: 'name must be a valid Oxide name: lowercase letters, digits and
+            ''-'', starting with a letter, at most 63 characters'
+          rule: has(self.spec.name) || self.metadata.name.matches('^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$')
+    served: true
+    storage: true
+    subresources:
+      status: {}

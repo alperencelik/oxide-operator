@@ -1,0 +1,9 @@
+apiVersion: oxide.100vms.com/v1alpha1
+kind: Project
+metadata:
+  name: home
+  namespace: default
+spec:
+  connectionRef:
+    name: oxide-home
+  description: Home rack workloads managed by oxide-operator

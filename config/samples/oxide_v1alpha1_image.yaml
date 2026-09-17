@@ -1,0 +1,11 @@
+apiVersion: oxide.100vms.com/v1alpha1
+kind: Image
+metadata:
+  name: debian-12
+spec:
+  connectionRef:
+    name: oxide
+  project: demo
+  os: debian
+  version: "12"
+  url: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.raw

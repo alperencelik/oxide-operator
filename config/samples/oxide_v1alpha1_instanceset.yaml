@@ -1,0 +1,17 @@
+apiVersion: oxide.100vms.com/v1alpha1
+kind: InstanceSet
+metadata:
+  name: demo-set
+spec:
+  replicas: 2
+  template:
+    labels:
+      app: demo
+    spec:
+      connectionRef:
+        name: oxide
+      project: demo
+      ncpus: 1
+      memory: 1Gi
+      bootDisk:
+        size: 5Gi

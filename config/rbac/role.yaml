@@ -1,0 +1,62 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+- apiGroups:
+  - oxide.100vms.com
+  resources:
+  - disks
+  - images
+  - instances
+  - instancesets
+  - oxideconnections
+  - projects
+  - snapshots
+  - vpcs
+  - vpcsubnets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - oxide.100vms.com
+  resources:
+  - disks/finalizers
+  - images/finalizers
+  - instances/finalizers
+  - instancesets/finalizers
+  - oxideconnections/finalizers
+  - projects/finalizers
+  - snapshots/finalizers
+  - vpcs/finalizers
+  - vpcsubnets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - oxide.100vms.com
+  resources:
+  - disks/status
+  - images/status
+  - instances/status
+  - instancesets/status
+  - oxideconnections/status
+  - projects/status
+  - snapshots/status
+  - vpcs/status
+  - vpcsubnets/status
+  verbs:
+  - get
+  - patch
+  - update

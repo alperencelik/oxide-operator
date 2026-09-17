@@ -1,0 +1,357 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: instancesets.oxide.100vms.com
+spec:
+  group: oxide.100vms.com
+  names:
+    kind: InstanceSet
+    listKind: InstanceSetList
+    plural: instancesets
+    shortNames:
+    - oxis
+    singular: instanceset
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.replicas
+      name: Desired
+      type: integer
+    - jsonPath: .status.readyReplicas
+      name: Ready
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: InstanceSet is the Schema for the instancesets API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: InstanceSetSpec defines the desired state of InstanceSet.
+            properties:
+              replicas:
+                default: 1
+                description: |-
+                  Replicas is the number of Instances, named <set>-0 ... <set>-N. A template spec.name
+                  is suffixed the same way.
+                format: int32
+                minimum: 0
+                type: integer
+              template:
+                description: Template is copied into every Instance.
+                properties:
+                  labels:
+                    additionalProperties:
+                      type: string
+                    description: Labels added to each Instance.
+                    type: object
+                  spec:
+                    description: Spec of each Instance.
+                    properties:
+                      bootDisk:
+                        description: BootDisk is created with the instance, or an
+                          existing disk to boot from. Immutable.
+                        properties:
+                          disk:
+                            description: Disk is the name of an existing disk to boot
+                              from.
+                            type: string
+                          image:
+                            description: Image is the name or ID of the image for
+                              the new boot disk. Blank if unset.
+                            type: string
+                          size:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: Size of a new boot disk named <instance>-boot,
+                              deleted with the instance.
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                        type: object
+                        x-kubernetes-validations:
+                        - message: bootDisk is immutable
+                          rule: self == oldSelf
+                        - message: set exactly one of disk or size
+                          rule: has(self.disk) != has(self.size)
+                        - message: image requires size
+                          rule: '!has(self.image) || has(self.size)'
+                      connectionRef:
+                        description: ConnectionRef is the name of the cluster-scoped
+                          OxideConnection to use.
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      deletionProtection:
+                        description: DeletionProtection keeps the Oxide resource when
+                          the Kubernetes object is deleted.
+                        type: boolean
+                      description:
+                        description: Description of the instance. Applied at creation.
+                        type: string
+                      disks:
+                        description: Disks are names of existing disks to attach.
+                          Applied at creation.
+                        items:
+                          type: string
+                        type: array
+                      externalIPs:
+                        description: ExternalIPs to allocate. Applied at creation.
+                        items:
+                          description: ExternalIP is an external address for the instance.
+                          properties:
+                            floatingIP:
+                              description: FloatingIP is the name or ID of an existing
+                                floating IP.
+                              type: string
+                            pool:
+                              description: Pool to allocate an ephemeral IP from.
+                                Defaults to the silo's default pool.
+                              type: string
+                            type:
+                              description: Type of the external IP.
+                              enum:
+                              - Ephemeral
+                              - Floating
+                              type: string
+                          required:
+                          - type
+                          type: object
+                          x-kubernetes-validations:
+                          - message: floatingIP is required for Floating and not allowed
+                              for Ephemeral
+                            rule: (self.type == 'Floating') == has(self.floatingIP)
+                        type: array
+                      hostname:
+                        description: Hostname defaults to the Oxide name. Applied
+                          at creation.
+                        type: string
+                      memory:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Memory is the amount of RAM, e.g. 4Gi. Changing
+                          it restarts the instance.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      name:
+                        description: |-
+                          Name is the Oxide name of the resource. Defaults to the object name; set it when objects
+                          in different namespaces would otherwise map to the same Oxide resource.
+                        pattern: ^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$
+                        type: string
+                        x-kubernetes-validations:
+                        - message: name is immutable
+                          rule: self == oldSelf
+                      ncpus:
+                        description: NCPUs is the number of vCPUs. Changing it restarts
+                          the instance.
+                        minimum: 1
+                        type: integer
+                      networkInterfaces:
+                        description: |-
+                          NetworkInterfaces to create. Defaults to one interface in the project's default VPC.
+                          Applied at creation.
+                        items:
+                          description: NetworkInterface attaches the instance to a
+                            VPC subnet.
+                          properties:
+                            description:
+                              description: Description of the interface.
+                              type: string
+                            name:
+                              description: Name of the interface.
+                              type: string
+                            subnet:
+                              description: Subnet is the subnet name within the VPC.
+                              type: string
+                            vpc:
+                              description: Vpc is the VPC name.
+                              type: string
+                          required:
+                          - name
+                          - subnet
+                          - vpc
+                          type: object
+                        type: array
+                      project:
+                        description: Project is the name or ID of the Oxide project.
+                        type: string
+                        x-kubernetes-validations:
+                        - message: project is immutable
+                          rule: self == oldSelf
+                      projectRef:
+                        description: ProjectRef references a Project in the same namespace.
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                        x-kubernetes-validations:
+                        - message: projectRef is immutable
+                          rule: self == oldSelf
+                      runState:
+                        default: Running
+                        description: RunState is the desired power state.
+                        enum:
+                        - Running
+                        - Stopped
+                        type: string
+                      sshPublicKeys:
+                        description: |-
+                          SSHPublicKeys are names or IDs of the user's SSH keys to inject. Defaults to all of them.
+                          Applied at creation.
+                        items:
+                          type: string
+                        type: array
+                      userData:
+                        description: UserData is plain-text cloud-init user data.
+                          Applied at creation.
+                        type: string
+                    required:
+                    - connectionRef
+                    - memory
+                    - ncpus
+                    type: object
+                    x-kubernetes-validations:
+                    - message: exactly one of project or projectRef must be set
+                      rule: has(self.project) != has(self.projectRef)
+                    - message: name is immutable
+                      rule: has(self.name) == has(oldSelf.name)
+                    - message: project is immutable
+                      rule: has(self.projectRef) == has(oldSelf.projectRef)
+                required:
+                - spec
+                type: object
+            required:
+            - template
+            type: object
+          status:
+            description: InstanceSetStatus defines the observed state of InstanceSet.
+            properties:
+              conditions:
+                description: Conditions describe the current state of the set.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration is the last generation reconciled
+                  successfully.
+                format: int64
+                type: integer
+              readyReplicas:
+                description: ReadyReplicas is the number of Instances with Ready=True.
+                format: int32
+                type: integer
+              replicas:
+                description: Replicas is the number of Instances managed by the set.
+                format: int32
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: template spec.name is a prefix of at most 57 characters
+          rule: '!has(self.spec.template.spec.name) || size(self.spec.template.spec.name)
+            <= 57'
+        - message: 'name must be a valid Oxide name prefix: lowercase letters, digits
+            and ''-'', starting with a letter, at most 57 characters'
+          rule: has(self.spec.template.spec.name) || self.metadata.name.matches('^[a-z]([-a-z0-9]{0,55}[a-z0-9])?$')
+    served: true
+    storage: true
+    subresources:
+      scale:
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.replicas
+      status: {}
