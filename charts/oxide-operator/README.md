@@ -5,14 +5,6 @@ A Kubernetes operator for [Oxide](https://oxide.computer) racks.
 ## Install
 
 ```sh
-helm repo add alperencelik https://alperencelik.github.io/helm-charts
-helm install oxide-operator alperencelik/oxide-operator \
-  --namespace oxide-operator-system --create-namespace
-```
-
-Or from GHCR, where the same chart is pushed as an OCI artifact:
-
-```sh
 helm install oxide-operator oci://ghcr.io/alperencelik/charts/oxide-operator \
   --namespace oxide-operator-system --create-namespace
 ```

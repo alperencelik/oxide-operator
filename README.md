@@ -25,14 +25,6 @@ The Kubernetes object name is the Oxide resource name, so it must be a valid Oxi
 ## Install
 
 ```sh
-helm repo add alperencelik https://alperencelik.github.io/helm-charts
-helm install oxide-operator alperencelik/oxide-operator \
-  --namespace oxide-operator-system --create-namespace
-```
-
-The same chart is published as an OCI artifact:
-
-```sh
 helm install oxide-operator oci://ghcr.io/alperencelik/charts/oxide-operator \
   --namespace oxide-operator-system --create-namespace
 ```
