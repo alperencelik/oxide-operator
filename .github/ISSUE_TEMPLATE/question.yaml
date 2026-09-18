@@ -1,0 +1,15 @@
+name: Question
+description: Ask a question about oxide-operator
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: What would you like to ask?
+      description: |
+        Please clearly describe the question you would like to ask about oxide-operator.
+        If it is about a resource that is not behaving as you expect, a bug report is
+        usually the better fit.
+    validations:
+      required: true

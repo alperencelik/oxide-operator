@@ -1,0 +1,120 @@
+name: Bug Report
+description: Report a bug encountered while operating oxide-operator
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: |
+        Please provide as much info as possible. Not doing so may result in your bug not being addressed in a timely manner.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How can we reproduce it (as minimally and precisely as possible)?
+      description: |
+        The resource that triggers it is usually enough. Redact anything you would rather not share;
+        the API token lives in a Secret, so the resources themselves are safe to paste.
+      render: yaml
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which resource is affected?
+      multiple: true
+      options:
+        - OxideConnection
+        - Project
+        - Vpc
+        - VpcSubnet
+        - Disk
+        - Snapshot
+        - Image
+        - Instance
+        - InstanceSet
+        - Not resource specific
+    validations:
+      required: true
+
+  - type: textarea
+    id: status
+    attributes:
+      label: Status of the resource
+      description: |
+        `kubectl get <kind> <name> -o yaml`. The Ready condition usually carries the Oxide API error.
+      render: yaml
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Operator logs
+      description: |
+        `kubectl logs -n oxide-operator-system deploy/oxide-operator -c manager`
+      render: console
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else we need to know?
+
+  - type: textarea
+    id: operatorVersion
+    attributes:
+      label: oxide-operator version
+      value: |
+        <details>
+
+        ```console
+        # Release version of oxide-operator or commit hash
+        ```
+
+        </details>
+    validations:
+      required: true
+
+  - type: textarea
+    id: kubernetesVersion
+    attributes:
+      label: Kubernetes version
+      value: |
+        <details>
+
+        ```console
+        $ kubectl version
+        # paste output here
+        ```
+
+        </details>
+    validations:
+      required: true
+
+  - type: textarea
+    id: oxideVersion
+    attributes:
+      label: Oxide version
+      value: |
+        <details>
+
+        ```console
+        # Oxide rack software version, from the web console or `oxide system version list`
+        ```
+
+        </details>

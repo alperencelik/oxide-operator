@@ -1,0 +1,23 @@
+name: Enhancement Tracking Issue
+description: Provide supporting details for a feature in development
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: feature
+    attributes:
+      label: What would you like to be added?
+      description: |
+        Please clearly describe the feature you would like to see added to oxide-operator.
+        It might be a new CRD, a new field on an existing one, or different reconciliation
+        behaviour. Anything backed by the Oxide API is fair game, so a pointer to the relevant
+        endpoint in https://docs.oxide.computer/api helps.
+    validations:
+      required: true
+
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Why is this needed?
+    validations:
+      required: true
