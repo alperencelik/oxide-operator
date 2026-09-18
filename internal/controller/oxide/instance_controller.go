@@ -57,6 +57,7 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if reconcileDisabled(ctx, inst) {
 		return ctrl.Result{}, nil
 	}
+	log.FromContext(ctx).Info("Reconciling Instance")
 	if !inst.DeletionTimestamp.IsZero() {
 		return r.handleDelete(ctx, inst)
 	}
@@ -95,7 +96,7 @@ func (r *InstanceReconciler) handleInstanceOperations(ctx context.Context, inst 
 	if err != nil {
 		return err
 	}
-	inst.Status.ID = cur.Id
+	inst.Status.ID, inst.Status.Project = cur.Id, inst.Spec.ProjectName()
 	inst.Status.State = string(cur.RunState)
 
 	// Oxide only resizes stopped instances.

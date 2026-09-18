@@ -66,6 +66,7 @@ func (r *ImageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	if reconcileDisabled(ctx, image) {
 		return ctrl.Result{}, nil
 	}
+	log.FromContext(ctx).Info("Reconciling Image")
 	if !image.DeletionTimestamp.IsZero() {
 		return r.handleDelete(ctx, image)
 	}
@@ -103,7 +104,7 @@ func (r *ImageReconciler) handleImageOperations(ctx context.Context, image *oxid
 			return err
 		}
 	}
-	image.Status.ID = cur.Id
+	image.Status.ID, image.Status.Project = cur.Id, image.Spec.ProjectName()
 	image.Status.Size = resource.NewQuantity(int64(cur.Size), resource.BinarySI)
 	logger := log.FromContext(ctx)
 	switch {

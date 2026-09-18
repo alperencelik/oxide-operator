@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	oxidev1alpha1 "github.com/alperencelik/oxide-operator/api/oxide/v1alpha1"
 )
@@ -56,6 +57,7 @@ func (r *InstanceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if reconcileDisabled(ctx, set) || !set.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
+	log.FromContext(ctx).Info("Reconciling InstanceSet")
 
 	patch := client.MergeFrom(set.DeepCopy())
 	res, err := setReady(&set.Status.Conditions, r.sync(ctx, set))

@@ -52,6 +52,7 @@ func (r *DiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if reconcileDisabled(ctx, disk) {
 		return ctrl.Result{}, nil
 	}
+	log.FromContext(ctx).Info("Reconciling Disk")
 	if !disk.DeletionTimestamp.IsZero() {
 		return r.handleDelete(ctx, disk)
 	}
@@ -95,6 +96,7 @@ func (r *DiskReconciler) handleDiskOperations(ctx context.Context, disk *oxidev1
 		return err
 	}
 	disk.Status.ID, disk.Status.State = cur.Id, string(cur.State.State())
+	disk.Status.Project = disk.Spec.ProjectName()
 	switch cur.State.State() {
 	case oxide.DiskStateStateFaulted:
 		return errors.New("disk is faulted")

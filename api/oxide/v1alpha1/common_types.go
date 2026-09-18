@@ -50,6 +50,10 @@ type ResourceStatus struct {
 	// ID is the Oxide ID of the resource.
 	// +optional
 	ID string `json:"id,omitempty"`
+	// Project is the Oxide project the resource lives in, resolved from spec.project
+	// or spec.projectRef. Empty for resources that are not project scoped.
+	// +optional
+	Project string `json:"project,omitempty"`
 	// Conditions describe the current state of the resource.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

@@ -38,7 +38,7 @@ const (
 	// resyncPeriod re-reads Oxide to catch changes made outside Kubernetes.
 	resyncPeriod = 10 * time.Minute
 	// progressPeriod is how soon an in-flight Oxide operation is checked again.
-	progressPeriod = 5 * time.Second
+	progressPeriod = 10 * time.Second
 )
 
 // progressing is returned while an Oxide operation is underway. setReady marks the

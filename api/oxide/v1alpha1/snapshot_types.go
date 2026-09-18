@@ -51,7 +51,7 @@ type SnapshotStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=oxsnap
 // +kubebuilder:validation:XValidation:rule="has(self.spec.name) || self.metadata.name.matches('^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$')",message="name must be a valid Oxide name: lowercase letters, digits and '-', starting with a letter, at most 63 characters"
-// +kubebuilder:printcolumn:name="Project",type=string,JSONPath=`.spec.project`
+// +kubebuilder:printcolumn:name="Project",type=string,JSONPath=`.status.project`
 // +kubebuilder:printcolumn:name="Disk",type=string,JSONPath=`.spec.disk`
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 // +kubebuilder:printcolumn:name="Size",type=string,JSONPath=`.status.size`

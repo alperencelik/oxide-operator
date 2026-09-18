@@ -54,6 +54,7 @@ func (r *VpcReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if reconcileDisabled(ctx, vpc) {
 		return ctrl.Result{}, nil
 	}
+	log.FromContext(ctx).Info("Reconciling Vpc")
 	if !vpc.DeletionTimestamp.IsZero() {
 		return r.handleDelete(ctx, vpc)
 	}
@@ -99,7 +100,7 @@ func (r *VpcReconciler) handleVpcOperations(ctx context.Context, vpc *oxidev1alp
 	if err != nil {
 		return err
 	}
-	vpc.Status.ID = cur.Id
+	vpc.Status.ID, vpc.Status.Project = cur.Id, vpc.Spec.ProjectName()
 
 	if vpc.Spec.FirewallRules == nil {
 		return nil

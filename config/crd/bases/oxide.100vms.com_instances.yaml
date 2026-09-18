@@ -17,7 +17,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.project
+    - jsonPath: .status.project
       name: Project
       type: string
     - jsonPath: .status.state
@@ -328,6 +328,11 @@ spec:
                   successfully.
                 format: int64
                 type: integer
+              project:
+                description: |-
+                  Project is the Oxide project the resource lives in, resolved from spec.project
+                  or spec.projectRef. Empty for resources that are not project scoped.
+                type: string
               state:
                 description: State is the Oxide run state, e.g. running or stopped.
                 type: string

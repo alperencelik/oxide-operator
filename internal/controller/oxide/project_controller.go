@@ -52,6 +52,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if reconcileDisabled(ctx, project) {
 		return ctrl.Result{}, nil
 	}
+	log.FromContext(ctx).Info("Reconciling Project")
 	if !project.DeletionTimestamp.IsZero() {
 		return r.handleDelete(ctx, project)
 	}

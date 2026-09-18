@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	oxidev1alpha1 "github.com/alperencelik/oxide-operator/api/oxide/v1alpha1"
 	"github.com/alperencelik/oxide-operator/pkg/oxideclient"
@@ -49,6 +50,7 @@ func (r *OxideConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if reconcileDisabled(ctx, conn) {
 		return ctrl.Result{}, nil
 	}
+	log.FromContext(ctx).Info("Reconciling OxideConnection")
 	if !conn.DeletionTimestamp.IsZero() {
 		return r.handleDelete(ctx, conn)
 	}

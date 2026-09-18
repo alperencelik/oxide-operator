@@ -54,6 +54,7 @@ func (r *VpcSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if reconcileDisabled(ctx, subnet) {
 		return ctrl.Result{}, nil
 	}
+	log.FromContext(ctx).Info("Reconciling VpcSubnet")
 	if !subnet.DeletionTimestamp.IsZero() {
 		return r.handleDelete(ctx, subnet)
 	}
@@ -104,7 +105,7 @@ func (r *VpcSubnetReconciler) handleVpcSubnetOperations(ctx context.Context, sub
 	if err != nil {
 		return err
 	}
-	subnet.Status.ID = cur.Id
+	subnet.Status.ID, subnet.Status.Project = cur.Id, string(project)
 	return nil
 }
 

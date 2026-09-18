@@ -54,7 +54,7 @@ type VpcSubnetSpec struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=oxsubnet
 // +kubebuilder:validation:XValidation:rule="has(self.spec.name) || self.metadata.name.matches('^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$')",message="name must be a valid Oxide name: lowercase letters, digits and '-', starting with a letter, at most 63 characters"
-// +kubebuilder:printcolumn:name="Project",type=string,JSONPath=`.spec.project`
+// +kubebuilder:printcolumn:name="Project",type=string,JSONPath=`.status.project`
 // +kubebuilder:printcolumn:name="VPC",type=string,JSONPath=`.spec.vpc`
 // +kubebuilder:printcolumn:name="IPv4",type=string,JSONPath=`.spec.ipv4Block`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`

@@ -53,6 +53,7 @@ func (r *SnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if reconcileDisabled(ctx, snapshot) {
 		return ctrl.Result{}, nil
 	}
+	log.FromContext(ctx).Info("Reconciling Snapshot")
 	if !snapshot.DeletionTimestamp.IsZero() {
 		return r.handleDelete(ctx, snapshot)
 	}
@@ -89,6 +90,7 @@ func (r *SnapshotReconciler) handleSnapshotOperations(ctx context.Context, snaps
 		return err
 	}
 	snapshot.Status.ID, snapshot.Status.State = cur.Id, string(cur.State)
+	snapshot.Status.Project = snapshot.Spec.ProjectName()
 	snapshot.Status.Size = resource.NewQuantity(int64(cur.Size), resource.BinarySI)
 	switch cur.State {
 	case oxide.SnapshotStateFaulted:
