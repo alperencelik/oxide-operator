@@ -3,25 +3,6 @@
 A Kubernetes operator for [Oxide](https://oxide.computer) racks. Declare projects, VPCs, disks, snapshots,
 images and instances as Kubernetes resources and the operator keeps them in sync with the Oxide API.
 
-## Resources
-
-All resources live in `oxide.100vms.com/v1alpha1`.
-
-| Kind | Scope | Oxide resource |
-|------|-------|----------------|
-| `OxideConnection` | Cluster | Silo endpoint + API token (from a Secret) |
-| `Project` | Namespaced | Project |
-| `Vpc` | Namespaced | VPC and, optionally, its firewall rules |
-| `VpcSubnet` | Namespaced | VPC subnet |
-| `Disk` | Namespaced | Disk (blank, from image or from snapshot) |
-| `Snapshot` | Namespaced | Disk snapshot |
-| `Image` | Namespaced | Image, imported from a raw image URL or created from a snapshot, optionally promoted to the silo |
-| `Instance` | Namespaced | Instance, with an optional boot disk created alongside it |
-| `InstanceSet` | Namespaced | N identical `Instance`s named `<set>-0 … <set>-N` |
-
-The Kubernetes object name is the Oxide resource name, so it must be a valid Oxide name
-(lowercase letters, digits and `-`, starting with a letter, at most 63 characters).
-
 ## Install
 
 ```sh
@@ -38,6 +19,22 @@ kubectl apply -f https://github.com/alperencelik/oxide-operator/releases/latest/
 ## Quick start
 
 See [docs/quick-start.md](docs/quick-start.md).
+
+## Resources
+
+All resources live in `oxide.100vms.com/v1alpha1`.
+
+| Kind | Scope | Oxide resource |
+|------|-------|----------------|
+| `OxideConnection` | Cluster | Silo endpoint + API token (from a Secret) |
+| `Project` | Namespaced | Project |
+| `Vpc` | Namespaced | VPC and, optionally, its firewall rules |
+| `VpcSubnet` | Namespaced | VPC subnet |
+| `Disk` | Namespaced | Disk (blank, from image or from snapshot) |
+| `Snapshot` | Namespaced | Disk snapshot |
+| `Image` | Namespaced | Image, imported from a raw image URL or created from a snapshot, optionally promoted to the silo |
+| `Instance` | Namespaced | Instance, with an optional boot disk created alongside it |
+| `InstanceSet` | Namespaced | N identical `Instance`s named `<set>-0 … <set>-N` |
 
 ## Development
 
