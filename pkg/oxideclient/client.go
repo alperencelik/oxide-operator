@@ -48,14 +48,16 @@ var (
 	clients   = map[string]connectionClient{}
 )
 
-// connectionClient is the client built for an OxideConnection, tagged with the UID and generation it was built from.
+// connectionClient is the client built for an OxideConnection, tagged with the UID, generation and token Secret
+// resourceVersion it was built from.
 type connectionClient struct {
 	spec   string
 	client *oxide.Client
 }
 
-// NewClientFromRef returns an Oxide client for the named OxideConnection. Tokens are assumed not to rotate:
-// the token Secret is read when the connection is first used and again only when its spec changes.
+// NewClientFromRef returns an Oxide client for the named OxideConnection. The token Secret is read when the
+// connection is first used and again when its spec or status.observedSecretResourceVersion changes; the
+// OxideConnection controller watches the Secret and bumps that status field when the token rotates.
 //
 // c is normally the manager's client, which serves OxideConnections from its cache and reads Secrets
 // straight from the API server (Secrets are excluded from the cache in cmd/main.go).
@@ -64,18 +66,23 @@ func NewClientFromRef(ctx context.Context, c client.Reader, name string) (*oxide
 	if err := c.Get(ctx, client.ObjectKey{Name: name}, conn); err != nil {
 		return nil, fmt.Errorf("getting OxideConnection %q: %w", name, err)
 	}
-	spec := fmt.Sprintf("%s/%d", conn.UID, conn.Generation)
+	return ClientFor(ctx, c, conn)
+}
+
+// ClientFor is NewClientFromRef for an OxideConnection that has already been fetched.
+func ClientFor(ctx context.Context, c client.Reader, conn *oxidev1alpha1.OxideConnection) (*oxide.Client, error) {
+	spec := fmt.Sprintf("%s/%d/%s", conn.UID, conn.Generation, conn.Status.ObservedSecretResourceVersion)
 
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
-	if cached, ok := clients[name]; ok && cached.spec == spec {
+	if cached, ok := clients[conn.Name]; ok && cached.spec == spec {
 		return cached.client, nil
 	}
 	oc, err := newClient(ctx, c, conn)
 	if err != nil {
 		return nil, err
 	}
-	clients[name] = connectionClient{spec: spec, client: oc}
+	clients[conn.Name] = connectionClient{spec: spec, client: oc}
 	return oc, nil
 }
 

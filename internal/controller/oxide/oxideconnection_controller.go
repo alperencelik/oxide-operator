@@ -19,12 +19,18 @@ package oxide
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/oxidecomputer/oxide.go/oxide"
 
 	oxidev1alpha1 "github.com/alperencelik/oxide-operator/api/oxide/v1alpha1"
 	"github.com/alperencelik/oxide-operator/pkg/oxideclient"
@@ -39,7 +45,7 @@ type OxideConnectionReconciler struct {
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=oxideconnections,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=oxideconnections/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=oxideconnections/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // Reconcile checks that the connection's token works and records who it authenticates as.
 func (r *OxideConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -61,7 +67,15 @@ func (r *OxideConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	patch := client.MergeFrom(conn.DeepCopy())
-	oc, err := oxideclient.NewClientFromRef(ctx, r.Client, conn.Name)
+	// Recording the Secret's resourceVersion makes controller rebuild its client after a token rotation.
+	ref := conn.Spec.TokenSecretRef
+	secret := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}
+	var oc *oxide.Client
+	err := r.Get(ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, secret)
+	if err == nil {
+		conn.Status.ObservedSecretResourceVersion = secret.ResourceVersion
+		oc, err = oxideclient.ClientFor(ctx, r.Client, conn)
+	}
 	if err == nil {
 		me, verr := oc.CurrentUserView(ctx)
 		if err = verr; err == nil {
@@ -146,6 +160,24 @@ func (r *OxideConnectionReconciler) inUse(ctx context.Context, name string) (boo
 func (r *OxideConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&oxidev1alpha1.OxideConnection{}, builder.WithPredicates(changed)).
+		// Metadata only, so Secret data is never cached; token rotations reconcile the connections using them.
+		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.connectionsForSecret)).
 		Named("oxide-oxideconnection").
 		Complete(r)
+}
+
+// connectionsForSecret maps a Secret to the OxideConnections whose token it holds.
+func (r *OxideConnectionReconciler) connectionsForSecret(ctx context.Context, secret client.Object) []reconcile.Request {
+	conns := &oxidev1alpha1.OxideConnectionList{}
+	if err := r.List(ctx, conns); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to list OxideConnections for Secret", "secret", client.ObjectKeyFromObject(secret))
+		return nil
+	}
+	var reqs []reconcile.Request
+	for _, c := range conns.Items {
+		if ref := c.Spec.TokenSecretRef; ref.Namespace == secret.GetNamespace() && ref.Name == secret.GetName() {
+			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKey{Name: c.Name}})
+		}
+	}
+	return reqs
 }

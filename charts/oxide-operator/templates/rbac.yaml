@@ -13,6 +13,8 @@ rules:
   - secrets
   verbs:
   - get
+  - list
+  - watch
 - apiGroups:
   - oxide.100vms.com
   resources:

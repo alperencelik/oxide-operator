@@ -67,8 +67,7 @@ spec:
               tokenSecretRef:
                 description: |-
                   TokenSecretRef selects the Secret key holding the Oxide API token.
-                  The token is read when the connection is first used and again only when this spec changes,
-                  so after replacing it in the Secret, change the spec or restart the operator.
+                  Changes to the Secret are picked up automatically.
                 properties:
                   key:
                     default: token
@@ -148,6 +147,10 @@ spec:
                   - type
                   type: object
                 type: array
+              observedSecretResourceVersion:
+                description: ObservedSecretResourceVersion is the resourceVersion
+                  of the token Secret the current client was built from.
+                type: string
               silo:
                 description: Silo is the silo the token authenticates against.
                 type: string

@@ -27,8 +27,7 @@ type OxideConnectionSpec struct {
 	// +kubebuilder:validation:Pattern=`^https?://`
 	Host string `json:"host"`
 	// TokenSecretRef selects the Secret key holding the Oxide API token.
-	// The token is read when the connection is first used and again only when this spec changes,
-	// so after replacing it in the Secret, change the spec or restart the operator.
+	// Changes to the Secret are picked up automatically.
 	TokenSecretRef SecretKeyReference `json:"tokenSecretRef"`
 	// InsecureSkipVerify disables TLS certificate verification.
 	// +optional
@@ -55,6 +54,9 @@ type OxideConnectionStatus struct {
 	// User is the display name of the token's user.
 	// +optional
 	User string `json:"user,omitempty"`
+	// ObservedSecretResourceVersion is the resourceVersion of the token Secret the current client was built from.
+	// +optional
+	ObservedSecretResourceVersion string `json:"observedSecretResourceVersion,omitempty"`
 	// Conditions describe the health of the connection.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
