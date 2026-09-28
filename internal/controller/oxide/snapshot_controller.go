@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,7 +38,8 @@ import (
 // SnapshotReconciler reconciles a Snapshot object
 type SnapshotReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=snapshots,verbs=get;list;watch;create;update;patch;delete
@@ -55,14 +57,14 @@ func (r *SnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 	log.FromContext(ctx).Info("Reconciling Snapshot")
 	if !snapshot.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, snapshot)
+		return ctrl.Result{}, warn(r.Recorder, snapshot, "DeleteFailed", r.handleDelete(ctx, snapshot))
 	}
 	if err := r.handleFinalizer(ctx, snapshot); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	patch := client.MergeFrom(snapshot.DeepCopy())
-	res, err := setReady(&snapshot.Status.Conditions, r.handleSnapshotOperations(ctx, snapshot))
+	res, err := setReady(r.Recorder, snapshot, &snapshot.Status.Conditions, r.handleSnapshotOperations(ctx, snapshot))
 	if meta.IsStatusConditionTrue(snapshot.Status.Conditions, typeReady) {
 		snapshot.Status.ObservedGeneration = snapshot.Generation
 	}
@@ -85,6 +87,7 @@ func (r *SnapshotReconciler) handleSnapshotOperations(ctx context.Context, snaps
 		cur, err = oc.SnapshotCreate(ctx, oxide.SnapshotCreateParams{Project: project, Body: &oxide.SnapshotCreate{
 			Name: oxide.Name(name), Description: snapshot.Spec.Description, Disk: oxide.NameOrId(snapshot.Spec.Disk),
 		}})
+		record(r.Recorder, snapshot, err, "Created", "Created Oxide snapshot")
 	}
 	if err != nil {
 		return err
@@ -109,25 +112,26 @@ func (r *SnapshotReconciler) handleFinalizer(ctx context.Context, snapshot *oxid
 }
 
 // handleDelete deletes the Oxide snapshot, unless protected, and removes the finalizer.
-func (r *SnapshotReconciler) handleDelete(ctx context.Context, snapshot *oxidev1alpha1.Snapshot) (ctrl.Result, error) {
+func (r *SnapshotReconciler) handleDelete(ctx context.Context, snapshot *oxidev1alpha1.Snapshot) error {
 	if !controllerutil.ContainsFinalizer(snapshot, finalizerName) {
-		return ctrl.Result{}, nil
+		return nil
 	}
 	if !snapshot.Spec.DeletionProtection {
 		oc, err := oxideclient.NewClientFromRef(ctx, r.Client, snapshot.Spec.ConnectionRef.Name)
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 		err = oc.SnapshotDelete(ctx, oxide.SnapshotDeleteParams{
 			Project: oxide.NameOrId(snapshot.Spec.ProjectName()), Snapshot: oxide.NameOrId(snapshot.Spec.OxideName(snapshot)),
 		})
 		if err != nil && !errors.Is(err, oxide.ErrObjectNotFound) {
-			return ctrl.Result{}, oxideclient.ShortError(err)
+			return oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide snapshot")
+		record(r.Recorder, snapshot, nil, "Deleted", "Deleted Oxide snapshot")
 	}
 	controllerutil.RemoveFinalizer(snapshot, finalizerName)
-	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, snapshot))
+	return client.IgnoreNotFound(r.Update(ctx, snapshot))
 }
 
 // SetupWithManager sets up the controller with the Manager.

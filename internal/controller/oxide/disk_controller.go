@@ -23,6 +23,7 @@ import (
 	"github.com/oxidecomputer/oxide.go/oxide"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +37,8 @@ import (
 // DiskReconciler reconciles a Disk object
 type DiskReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=disks,verbs=get;list;watch;create;update;patch;delete
@@ -54,14 +56,14 @@ func (r *DiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 	log.FromContext(ctx).Info("Reconciling Disk")
 	if !disk.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, disk)
+		return ctrl.Result{}, warn(r.Recorder, disk, "DeleteFailed", r.handleDelete(ctx, disk))
 	}
 	if err := r.handleFinalizer(ctx, disk); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	patch := client.MergeFrom(disk.DeepCopy())
-	res, err := setReady(&disk.Status.Conditions, r.handleDiskOperations(ctx, disk))
+	res, err := setReady(r.Recorder, disk, &disk.Status.Conditions, r.handleDiskOperations(ctx, disk))
 	if meta.IsStatusConditionTrue(disk.Status.Conditions, typeReady) {
 		disk.Status.ObservedGeneration = disk.Generation
 	}
@@ -91,6 +93,7 @@ func (r *DiskReconciler) handleDiskOperations(ctx context.Context, disk *oxidev1
 			Size:        oxide.ByteCount(disk.Spec.Size.Value()),
 			DiskBackend: oxide.DiskBackend{Value: &oxide.DiskBackendDistributed{DiskSource: src}},
 		}})
+		record(r.Recorder, disk, err, "Created", "Created Oxide disk")
 	}
 	if err != nil {
 		return err
@@ -114,23 +117,24 @@ func (r *DiskReconciler) handleFinalizer(ctx context.Context, disk *oxidev1alpha
 }
 
 // handleDelete deletes the Oxide disk, unless protected, and removes the finalizer.
-func (r *DiskReconciler) handleDelete(ctx context.Context, disk *oxidev1alpha1.Disk) (ctrl.Result, error) {
+func (r *DiskReconciler) handleDelete(ctx context.Context, disk *oxidev1alpha1.Disk) error {
 	if !controllerutil.ContainsFinalizer(disk, finalizerName) {
-		return ctrl.Result{}, nil
+		return nil
 	}
 	if !disk.Spec.DeletionProtection {
 		oc, err := oxideclient.NewClientFromRef(ctx, r.Client, disk.Spec.ConnectionRef.Name)
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 		err = oc.DiskDelete(ctx, oxide.DiskDeleteParams{Project: oxide.NameOrId(disk.Spec.ProjectName()), Disk: oxide.NameOrId(disk.Spec.OxideName(disk))})
 		if err != nil && !errors.Is(err, oxide.ErrObjectNotFound) {
-			return ctrl.Result{}, oxideclient.ShortError(err)
+			return oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide disk")
+		record(r.Recorder, disk, nil, "Deleted", "Deleted Oxide disk")
 	}
 	controllerutil.RemoveFinalizer(disk, finalizerName)
-	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, disk))
+	return client.IgnoreNotFound(r.Update(ctx, disk))
 }
 
 // diskSource resolves an image or snapshot to a disk source, defaulting to a blank disk.

@@ -33,6 +33,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -65,6 +66,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var pollInterval time.Duration
+	var maxConcurrentReconciles int
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -82,6 +84,8 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics server")
 	flag.DurationVar(&pollInterval, "instance-poll-interval", 60*time.Second,
 		"How often Instances are polled in Oxide for drift and status.")
+	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 5,
+		"How many objects each controller reconciles at once.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -141,6 +145,7 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "d29486c8.100vms.com",
+		Controller:             config.Controller{MaxConcurrentReconciles: maxConcurrentReconciles},
 		// Secrets are read straight from the API server instead of caching every Secret in the cluster.
 		Client: client.Options{
 			Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}}},
@@ -165,66 +170,76 @@ func main() {
 		),
 	)
 
+	recorder := mgr.GetEventRecorder("oxide-operator")
 	if err := (&oxidecontroller.OxideConnectionReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "oxide-oxideconnection")
 		os.Exit(1)
 	}
 	if err := (&oxidecontroller.ProjectReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "oxide-project")
 		os.Exit(1)
 	}
 	if err := (&oxidecontroller.InstanceReconciler{
-		Client:  mgr.GetClient(),
-		Scheme:  mgr.GetScheme(),
-		Watcher: instanceWatcher,
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: recorder,
+		Watcher:  instanceWatcher,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "oxide-instance")
 		os.Exit(1)
 	}
 	if err := (&oxidecontroller.DiskReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "oxide-disk")
 		os.Exit(1)
 	}
 	if err := (&oxidecontroller.VpcReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "oxide-vpc")
 		os.Exit(1)
 	}
 	if err := (&oxidecontroller.VpcSubnetReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "oxide-vpcsubnet")
 		os.Exit(1)
 	}
 	if err := (&oxidecontroller.SnapshotReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "oxide-snapshot")
 		os.Exit(1)
 	}
 	if err := (&oxidecontroller.InstanceSetReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "oxide-instanceset")
 		os.Exit(1)
 	}
 	if err := (&oxidecontroller.ImageReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "oxide-image")
 		os.Exit(1)
