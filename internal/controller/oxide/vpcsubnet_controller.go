@@ -24,6 +24,7 @@ import (
 	"github.com/oxidecomputer/oxide.go/oxide"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,7 +38,8 @@ import (
 // VpcSubnetReconciler reconciles a VpcSubnet object
 type VpcSubnetReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=vpcsubnets,verbs=get;list;watch;create;update;patch;delete
@@ -56,14 +58,15 @@ func (r *VpcSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	log.FromContext(ctx).Info("Reconciling VpcSubnet")
 	if !subnet.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, subnet)
+		res, err := r.handleDelete(ctx, subnet)
+		return res, warn(r.Recorder, subnet, "DeleteFailed", err)
 	}
 	if err := r.handleFinalizer(ctx, subnet); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	patch := client.MergeFrom(subnet.DeepCopy())
-	res, err := setReady(&subnet.Status.Conditions, r.handleVpcSubnetOperations(ctx, subnet))
+	res, err := setReady(r.Recorder, subnet, &subnet.Status.Conditions, r.handleVpcSubnetOperations(ctx, subnet))
 	if meta.IsStatusConditionTrue(subnet.Status.Conditions, typeReady) {
 		subnet.Status.ObservedGeneration = subnet.Generation
 	}
@@ -96,11 +99,13 @@ func (r *VpcSubnetReconciler) handleVpcSubnetOperations(ctx context.Context, sub
 			Ipv4Block:   oxide.Ipv4Net(subnet.Spec.IPv4Block),
 			Ipv6Block:   oxide.Ipv6Net(subnet.Spec.IPv6Block),
 		}})
+		record(r.Recorder, subnet, err, "Created", "Created Oxide subnet")
 	case err == nil && subnet.Spec.Description != "" && cur.Description != subnet.Spec.Description:
 		logger.Info("Updating Oxide subnet")
 		cur, err = oc.VpcSubnetUpdate(ctx, oxide.VpcSubnetUpdateParams{
 			Project: project, Vpc: vpc, Subnet: name, Body: &oxide.VpcSubnetUpdate{Description: subnet.Spec.Description},
 		})
+		record(r.Recorder, subnet, err, "Updated", "Updated Oxide subnet")
 	}
 	if err != nil {
 		return err
@@ -139,6 +144,7 @@ func (r *VpcSubnetReconciler) handleDelete(ctx context.Context, subnet *oxidev1a
 			return ctrl.Result{}, oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide subnet")
+		record(r.Recorder, subnet, nil, "Deleted", "Deleted Oxide subnet")
 	}
 	controllerutil.RemoveFinalizer(subnet, finalizerName)
 	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, subnet))

@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,7 +41,8 @@ const instanceSetLabel = "oxide.100vms.com/instanceset"
 // InstanceSetReconciler reconciles a InstanceSet object
 type InstanceSetReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=instancesets,verbs=get;list;watch;create;update;patch;delete
@@ -60,7 +62,7 @@ func (r *InstanceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	log.FromContext(ctx).Info("Reconciling InstanceSet")
 
 	patch := client.MergeFrom(set.DeepCopy())
-	res, err := setReady(&set.Status.Conditions, r.sync(ctx, set))
+	res, err := setReady(r.Recorder, set, &set.Status.Conditions, r.sync(ctx, set))
 	if meta.IsStatusConditionTrue(set.Status.Conditions, typeReady) {
 		set.Status.ObservedGeneration = set.Generation
 	}

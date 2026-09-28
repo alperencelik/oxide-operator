@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,8 +41,9 @@ import (
 // InstanceReconciler reconciles a Instance object
 type InstanceReconciler struct {
 	client.Client
-	Scheme  *runtime.Scheme
-	Watcher *watcher.ExternalWatcher
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
+	Watcher  *watcher.ExternalWatcher
 }
 
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=instances,verbs=get;list;watch;create;update;patch;delete
@@ -59,14 +61,15 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 	log.FromContext(ctx).Info("Reconciling Instance")
 	if !inst.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, inst)
+		res, err := r.handleDelete(ctx, inst)
+		return res, warn(r.Recorder, inst, "DeleteFailed", err)
 	}
 	if err := r.handleFinalizer(ctx, inst); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	patch := client.MergeFrom(inst.DeepCopy())
-	res, err := setReady(&inst.Status.Conditions, r.handleInstanceOperations(ctx, inst))
+	res, err := setReady(r.Recorder, inst, &inst.Status.Conditions, r.handleInstanceOperations(ctx, inst))
 	if meta.IsStatusConditionTrue(inst.Status.Conditions, typeReady) {
 		inst.Status.ObservedGeneration = inst.Generation
 	}
@@ -92,6 +95,7 @@ func (r *InstanceReconciler) handleInstanceOperations(ctx context.Context, inst 
 			return berr
 		}
 		cur, err = oc.InstanceCreate(ctx, oxide.InstanceCreateParams{Project: project, Body: body})
+		record(r.Recorder, inst, err, "Created", "Created Oxide instance")
 	}
 	if err != nil {
 		return err
@@ -102,13 +106,14 @@ func (r *InstanceReconciler) handleInstanceOperations(ctx context.Context, inst 
 	// Oxide only resizes stopped instances.
 	if int(cur.Ncpus) != inst.Spec.NCPUs || int64(cur.Memory) != inst.Spec.Memory.Value() {
 		if cur.RunState != oxide.InstanceStateStopped {
-			return stopInstance(ctx, oc, cur, "stopping instance to resize")
+			return r.stopInstance(ctx, oc, inst, cur, "stopping instance to resize")
 		}
 		logger.Info("Resizing Oxide instance", "ncpus", inst.Spec.NCPUs, "memory", inst.Spec.Memory.String())
 		_, err := oc.InstanceUpdate(ctx, oxide.InstanceUpdateParams{Instance: oxide.NameOrId(cur.Id), Body: instanceUpdate(cur, inst)})
 		if err != nil {
 			return err
 		}
+		record(r.Recorder, inst, nil, "Resized", "Resized Oxide instance to %d CPUs and %s memory", inst.Spec.NCPUs, inst.Spec.Memory.String())
 		return progressing("resized instance")
 	}
 
@@ -119,9 +124,10 @@ func (r *InstanceReconciler) handleInstanceOperations(ctx context.Context, inst 
 		if _, err := oc.InstanceStart(ctx, oxide.InstanceStartParams{Instance: oxide.NameOrId(cur.Id)}); err != nil {
 			return err
 		}
+		record(r.Recorder, inst, nil, "Starting", "Starting Oxide instance")
 		return progressing("starting instance")
 	case cur.RunState == oxide.InstanceStateRunning && !wantRunning:
-		return stopInstance(ctx, oc, cur, "stopping instance")
+		return r.stopInstance(ctx, oc, inst, cur, "stopping instance")
 	case cur.RunState == oxide.InstanceStateFailed:
 		return errors.New("instance is in failed state")
 	case cur.RunState != oxide.InstanceStateRunning && cur.RunState != oxide.InstanceStateStopped:
@@ -167,20 +173,21 @@ func (r *InstanceReconciler) handleDelete(ctx context.Context, inst *oxidev1alph
 			return ctrl.Result{}, err
 		}
 		var p progressing
-		switch err := deleteInstance(ctx, oc, oxide.NameOrId(inst.Spec.ProjectName()), inst); {
+		switch err := r.deleteInstance(ctx, oc, oxide.NameOrId(inst.Spec.ProjectName()), inst); {
 		case errors.As(err, &p):
 			return ctrl.Result{RequeueAfter: progressPeriod}, nil
 		case err != nil:
 			return ctrl.Result{}, oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide instance")
+		record(r.Recorder, inst, nil, "Deleted", "Deleted Oxide instance")
 	}
 	controllerutil.RemoveFinalizer(inst, finalizerName)
 	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, inst))
 }
 
 // deleteInstance stops and deletes the instance, then removes the boot disk created with it.
-func deleteInstance(ctx context.Context, oc *oxide.Client, project oxide.NameOrId, inst *oxidev1alpha1.Instance) error {
+func (r *InstanceReconciler) deleteInstance(ctx context.Context, oc *oxide.Client, project oxide.NameOrId, inst *oxidev1alpha1.Instance) error {
 	cur, err := oc.InstanceView(ctx, oxide.InstanceViewParams{Project: project, Instance: oxide.NameOrId(inst.Spec.OxideName(inst))})
 	switch {
 	case errors.Is(err, oxide.ErrObjectNotFound):
@@ -192,7 +199,7 @@ func deleteInstance(ctx context.Context, oc *oxide.Client, project oxide.NameOrI
 			return err
 		}
 	default:
-		return stopInstance(ctx, oc, cur, "stopping instance before delete")
+		return r.stopInstance(ctx, oc, inst, cur, "stopping instance before delete")
 	}
 	if bd := inst.Spec.BootDisk; bd != nil && bd.Disk == "" {
 		err := oc.DiskDelete(ctx, oxide.DiskDeleteParams{Project: project, Disk: oxide.NameOrId(bootDiskName(inst))})
@@ -203,12 +210,13 @@ func deleteInstance(ctx context.Context, oc *oxide.Client, project oxide.NameOrI
 	return nil
 }
 
-func stopInstance(ctx context.Context, oc *oxide.Client, cur *oxide.Instance, msg string) error {
+func (r *InstanceReconciler) stopInstance(ctx context.Context, oc *oxide.Client, inst *oxidev1alpha1.Instance, cur *oxide.Instance, msg string) error {
 	if cur.RunState == oxide.InstanceStateRunning {
 		log.FromContext(ctx).Info("Stopping Oxide instance", "reason", msg)
 		if _, err := oc.InstanceStop(ctx, oxide.InstanceStopParams{Instance: oxide.NameOrId(cur.Id)}); err != nil {
 			return err
 		}
+		record(r.Recorder, inst, nil, "Stopping", "Stopping Oxide instance: %s", msg)
 	}
 	return progressing(msg)
 }

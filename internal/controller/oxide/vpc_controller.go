@@ -25,6 +25,7 @@ import (
 	"github.com/oxidecomputer/oxide.go/oxide"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,7 +39,8 @@ import (
 // VpcReconciler reconciles a Vpc object
 type VpcReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=vpcs,verbs=get;list;watch;create;update;patch;delete
@@ -56,14 +58,15 @@ func (r *VpcReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 	log.FromContext(ctx).Info("Reconciling Vpc")
 	if !vpc.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, vpc)
+		res, err := r.handleDelete(ctx, vpc)
+		return res, warn(r.Recorder, vpc, "DeleteFailed", err)
 	}
 	if err := r.handleFinalizer(ctx, vpc); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	patch := client.MergeFrom(vpc.DeepCopy())
-	res, err := setReady(&vpc.Status.Conditions, r.handleVpcOperations(ctx, vpc))
+	res, err := setReady(r.Recorder, vpc, &vpc.Status.Conditions, r.handleVpcOperations(ctx, vpc))
 	if meta.IsStatusConditionTrue(vpc.Status.Conditions, typeReady) {
 		vpc.Status.ObservedGeneration = vpc.Generation
 	}
@@ -91,11 +94,13 @@ func (r *VpcReconciler) handleVpcOperations(ctx context.Context, vpc *oxidev1alp
 		cur, err = oc.VpcCreate(ctx, oxide.VpcCreateParams{Project: project, Body: &oxide.VpcCreate{
 			Name: oxide.Name(name), Description: vpc.Spec.Description, DnsName: dnsName, Ipv6Prefix: oxide.Ipv6Net(vpc.Spec.IPv6Prefix),
 		}})
+		record(r.Recorder, vpc, err, "Created", "Created Oxide VPC")
 	case err == nil && (cur.DnsName != dnsName || vpc.Spec.Description != "" && cur.Description != vpc.Spec.Description):
 		logger.Info("Updating Oxide VPC")
 		cur, err = oc.VpcUpdate(ctx, oxide.VpcUpdateParams{Project: project, Vpc: name, Body: &oxide.VpcUpdate{
 			Description: vpc.Spec.Description, DnsName: dnsName,
 		}})
+		record(r.Recorder, vpc, err, "Updated", "Updated Oxide VPC")
 	}
 	if err != nil {
 		return err
@@ -133,6 +138,7 @@ func (r *VpcReconciler) handleDelete(ctx context.Context, vpc *oxidev1alpha1.Vpc
 			return ctrl.Result{}, oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide VPC")
+		record(r.Recorder, vpc, nil, "Deleted", "Deleted Oxide VPC")
 	}
 	controllerutil.RemoveFinalizer(vpc, finalizerName)
 	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, vpc))

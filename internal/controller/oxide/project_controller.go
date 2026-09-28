@@ -23,6 +23,7 @@ import (
 	"github.com/oxidecomputer/oxide.go/oxide"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +37,8 @@ import (
 // ProjectReconciler reconciles a Project object
 type ProjectReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=projects,verbs=get;list;watch;create;update;patch;delete
@@ -54,14 +56,15 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	log.FromContext(ctx).Info("Reconciling Project")
 	if !project.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, project)
+		res, err := r.handleDelete(ctx, project)
+		return res, warn(r.Recorder, project, "DeleteFailed", err)
 	}
 	if err := r.handleFinalizer(ctx, project); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	patch := client.MergeFrom(project.DeepCopy())
-	res, err := setReady(&project.Status.Conditions, r.handleProjectOperations(ctx, project))
+	res, err := setReady(r.Recorder, project, &project.Status.Conditions, r.handleProjectOperations(ctx, project))
 	if meta.IsStatusConditionTrue(project.Status.Conditions, typeReady) {
 		project.Status.ObservedGeneration = project.Generation
 	}
@@ -86,11 +89,13 @@ func (r *ProjectReconciler) handleProjectOperations(ctx context.Context, project
 		cur, err = oc.ProjectCreate(ctx, oxide.ProjectCreateParams{
 			Body: &oxide.ProjectCreate{Name: oxide.Name(project.Name), Description: project.Spec.Description},
 		})
+		record(r.Recorder, project, err, "Created", "Created Oxide project")
 	case err == nil && project.Spec.Description != "" && cur.Description != project.Spec.Description:
 		logger.Info("Updating Oxide project")
 		cur, err = oc.ProjectUpdate(ctx, oxide.ProjectUpdateParams{
 			Project: name, Body: &oxide.ProjectUpdate{Description: project.Spec.Description},
 		})
+		record(r.Recorder, project, err, "Updated", "Updated Oxide project")
 	}
 	if err != nil {
 		return err
@@ -126,6 +131,7 @@ func (r *ProjectReconciler) handleDelete(ctx context.Context, project *oxidev1al
 			return ctrl.Result{}, oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide project")
+		record(r.Recorder, project, nil, "Deleted", "Deleted Oxide project")
 	}
 	controllerutil.RemoveFinalizer(project, finalizerName)
 	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, project))

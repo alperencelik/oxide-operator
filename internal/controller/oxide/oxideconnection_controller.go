@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,7 +40,8 @@ import (
 // OxideConnectionReconciler reconciles a OxideConnection object
 type OxideConnectionReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=oxideconnections,verbs=get;list;watch;create;update;patch;delete
@@ -58,7 +60,8 @@ func (r *OxideConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 	log.FromContext(ctx).Info("Reconciling OxideConnection")
 	if !conn.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, conn)
+		res, err := r.handleDelete(ctx, conn)
+		return res, warn(r.Recorder, conn, "DeleteFailed", err)
 	}
 	if controllerutil.AddFinalizer(conn, finalizerName) {
 		if err := r.Update(ctx, conn); err != nil {
@@ -82,7 +85,7 @@ func (r *OxideConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			conn.Status.Silo, conn.Status.User = string(me.SiloName), me.DisplayName
 		}
 	}
-	res, err := setReady(&conn.Status.Conditions, err)
+	res, err := setReady(r.Recorder, conn, &conn.Status.Conditions, err)
 	if perr := r.Status().Patch(ctx, conn, patch); perr != nil && err == nil {
 		return ctrl.Result{}, client.IgnoreNotFound(perr)
 	}

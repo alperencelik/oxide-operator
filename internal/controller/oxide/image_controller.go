@@ -31,11 +31,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	oxidev1alpha1 "github.com/alperencelik/oxide-operator/api/oxide/v1alpha1"
 	"github.com/alperencelik/oxide-operator/pkg/oxideclient"
@@ -50,7 +53,8 @@ const (
 // ImageReconciler reconciles a Image object
 type ImageReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=oxide.100vms.com,resources=images,verbs=get;list;watch;create;update;patch;delete
@@ -68,14 +72,15 @@ func (r *ImageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 	log.FromContext(ctx).Info("Reconciling Image")
 	if !image.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, image)
+		res, err := r.handleDelete(ctx, image)
+		return res, warn(r.Recorder, image, "DeleteFailed", err)
 	}
 	if err := r.handleFinalizer(ctx, image); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	patch := client.MergeFrom(image.DeepCopy())
-	res, err := setReady(&image.Status.Conditions, r.handleImageOperations(ctx, image))
+	res, err := setReady(r.Recorder, image, &image.Status.Conditions, r.handleImageOperations(ctx, image))
 	if meta.IsStatusConditionTrue(image.Status.Conditions, typeReady) {
 		image.Status.ObservedGeneration = image.Generation
 	}
@@ -94,6 +99,7 @@ func (r *ImageReconciler) handleImageOperations(ctx context.Context, image *oxid
 	cur, err := viewImage(ctx, oc, image.Spec.ProjectName(), image.Spec.OxideName(image))
 	if errors.Is(err, oxide.ErrObjectNotFound) {
 		cur, err = createImage(ctx, oc, image)
+		record(r.Recorder, image, err, "Created", "Created Oxide image")
 	}
 	if err != nil {
 		return err
@@ -111,11 +117,13 @@ func (r *ImageReconciler) handleImageOperations(ctx context.Context, image *oxid
 	case image.Spec.Promote && cur.ProjectId != "":
 		logger.Info("Promoting Oxide image to silo")
 		_, err = oc.ImagePromote(ctx, oxide.ImagePromoteParams{Image: oxide.NameOrId(cur.Id)})
+		record(r.Recorder, image, err, "Promoted", "Promoted Oxide image to silo")
 	case !image.Spec.Promote && cur.ProjectId == "":
 		logger.Info("Demoting Oxide image to project")
 		_, err = oc.ImageDemote(ctx, oxide.ImageDemoteParams{
 			Project: oxide.NameOrId(image.Spec.ProjectName()), Image: oxide.NameOrId(cur.Id),
 		})
+		record(r.Recorder, image, err, "Demoted", "Demoted Oxide image to project")
 	}
 	return err
 }
@@ -160,8 +168,8 @@ func importDisk(ctx context.Context, oc *oxide.Client, image *oxidev1alpha1.Imag
 	switch state := disk.State.State(); state {
 	case oxide.DiskStateStateImportReady:
 		return writeDisk(ctx, oc, image, name, int64(disk.Size))
-	case oxide.DiskStateStateImportingFromBulkWrites:
-		// A write was interrupted, e.g. by an operator restart.
+	case oxide.DiskStateStateImportingFromBulkWrites, oxide.DiskStateStateDetached:
+		// A write was interrupted, e.g. by an operator restart, or failed and was finalized without a snapshot.
 		if err := deleteImportDisk(ctx, oc, project, oxide.NameOrId(name)); err != nil {
 			return err
 		}
@@ -221,7 +229,7 @@ func writeDisk(ctx context.Context, oc *oxide.Client, image *oxidev1alpha1.Image
 		}})
 	})
 	if err == nil && image.Spec.SHA256 != "" && hex.EncodeToString(sum.Sum(nil)) != image.Spec.SHA256 {
-		err = fmt.Errorf("sha256 of %s does not match spec.sha256", image.Spec.URL)
+		err = failed{fmt.Errorf("sha256 of %s does not match spec.sha256", image.Spec.URL)}
 	}
 	if err == nil {
 		err = oc.DiskBulkWriteImportStop(ctx, oxide.DiskBulkWriteImportStopParams{Project: project, Disk: disk})
@@ -276,8 +284,13 @@ func download(ctx context.Context, url string) (*http.Response, error) {
 	}
 	if resp.StatusCode != http.StatusOK || resp.ContentLength < 0 {
 		_ = resp.Body.Close()
-		return nil, fmt.Errorf("downloading %s: got %s with length %d, want 200 OK with a known length",
+		err = fmt.Errorf("downloading %s: got %s with length %d, want 200 OK with a known length",
 			url, resp.Status, resp.ContentLength)
+		// A wrong url or missing length won't fix itself; server errors and rate limits may.
+		if resp.StatusCode < 500 && resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode != http.StatusRequestTimeout {
+			err = failed{err}
+		}
+		return nil, err
 	}
 	return resp, nil
 }
@@ -342,19 +355,20 @@ func (r *ImageReconciler) handleDelete(ctx context.Context, image *oxidev1alpha1
 	if !image.Spec.DeletionProtection {
 		oc, err := oxideclient.NewClientFromRef(ctx, r.Client, image.Spec.ConnectionRef.Name)
 		if err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, reconcile.TerminalError(err)
 		}
 		if err := deleteImport(ctx, oc, image); err != nil {
-			return ctrl.Result{}, oxideclient.ShortError(err)
+			return ctrl.Result{}, reconcile.TerminalError(oxideclient.ShortError(err))
 		}
 		cur, err := viewImage(ctx, oc, image.Spec.ProjectName(), image.Spec.OxideName(image))
 		if err == nil {
 			err = oc.ImageDelete(ctx, oxide.ImageDeleteParams{Image: oxide.NameOrId(cur.Id)})
 		}
 		if err != nil && !errors.Is(err, oxide.ErrObjectNotFound) {
-			return ctrl.Result{}, oxideclient.ShortError(err)
+			return ctrl.Result{}, reconcile.TerminalError(oxideclient.ShortError(err))
 		}
 		log.FromContext(ctx).Info("Deleted Oxide image")
+		record(r.Recorder, image, nil, "Deleted", "Deleted Oxide image")
 	}
 	controllerutil.RemoveFinalizer(image, finalizerName)
 	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, image))
@@ -364,6 +378,7 @@ func (r *ImageReconciler) handleDelete(ctx context.Context, image *oxidev1alpha1
 func (r *ImageReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&oxidev1alpha1.Image{}, builder.WithPredicates(changed)).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 1}).
 		Named("oxide-image").
 		Complete(r)
 }
