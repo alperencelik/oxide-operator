@@ -56,8 +56,7 @@ func (r *DiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 	log.FromContext(ctx).Info("Reconciling Disk")
 	if !disk.DeletionTimestamp.IsZero() {
-		res, err := r.handleDelete(ctx, disk)
-		return res, warn(r.Recorder, disk, "DeleteFailed", err)
+		return ctrl.Result{}, warn(r.Recorder, disk, "DeleteFailed", r.handleDelete(ctx, disk))
 	}
 	if err := r.handleFinalizer(ctx, disk); err != nil {
 		return ctrl.Result{}, err
@@ -118,24 +117,24 @@ func (r *DiskReconciler) handleFinalizer(ctx context.Context, disk *oxidev1alpha
 }
 
 // handleDelete deletes the Oxide disk, unless protected, and removes the finalizer.
-func (r *DiskReconciler) handleDelete(ctx context.Context, disk *oxidev1alpha1.Disk) (ctrl.Result, error) {
+func (r *DiskReconciler) handleDelete(ctx context.Context, disk *oxidev1alpha1.Disk) error {
 	if !controllerutil.ContainsFinalizer(disk, finalizerName) {
-		return ctrl.Result{}, nil
+		return nil
 	}
 	if !disk.Spec.DeletionProtection {
 		oc, err := oxideclient.NewClientFromRef(ctx, r.Client, disk.Spec.ConnectionRef.Name)
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 		err = oc.DiskDelete(ctx, oxide.DiskDeleteParams{Project: oxide.NameOrId(disk.Spec.ProjectName()), Disk: oxide.NameOrId(disk.Spec.OxideName(disk))})
 		if err != nil && !errors.Is(err, oxide.ErrObjectNotFound) {
-			return ctrl.Result{}, oxideclient.ShortError(err)
+			return oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide disk")
 		record(r.Recorder, disk, nil, "Deleted", "Deleted Oxide disk")
 	}
 	controllerutil.RemoveFinalizer(disk, finalizerName)
-	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, disk))
+	return client.IgnoreNotFound(r.Update(ctx, disk))
 }
 
 // diskSource resolves an image or snapshot to a disk source, defaulting to a blank disk.

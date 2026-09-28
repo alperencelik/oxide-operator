@@ -72,8 +72,7 @@ func (r *ImageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 	log.FromContext(ctx).Info("Reconciling Image")
 	if !image.DeletionTimestamp.IsZero() {
-		res, err := r.handleDelete(ctx, image)
-		return res, warn(r.Recorder, image, "DeleteFailed", err)
+		return ctrl.Result{}, warn(r.Recorder, image, "DeleteFailed", r.handleDelete(ctx, image))
 	}
 	if err := r.handleFinalizer(ctx, image); err != nil {
 		return ctrl.Result{}, err
@@ -348,30 +347,30 @@ func (r *ImageReconciler) handleFinalizer(ctx context.Context, image *oxidev1alp
 }
 
 // handleDelete deletes the Oxide image and any leftover import, unless protected, and removes the finalizer.
-func (r *ImageReconciler) handleDelete(ctx context.Context, image *oxidev1alpha1.Image) (ctrl.Result, error) {
+func (r *ImageReconciler) handleDelete(ctx context.Context, image *oxidev1alpha1.Image) error {
 	if !controllerutil.ContainsFinalizer(image, finalizerName) {
-		return ctrl.Result{}, nil
+		return nil
 	}
 	if !image.Spec.DeletionProtection {
 		oc, err := oxideclient.NewClientFromRef(ctx, r.Client, image.Spec.ConnectionRef.Name)
 		if err != nil {
-			return ctrl.Result{}, reconcile.TerminalError(err)
+			return reconcile.TerminalError(err)
 		}
 		if err := deleteImport(ctx, oc, image); err != nil {
-			return ctrl.Result{}, reconcile.TerminalError(oxideclient.ShortError(err))
+			return reconcile.TerminalError(oxideclient.ShortError(err))
 		}
 		cur, err := viewImage(ctx, oc, image.Spec.ProjectName(), image.Spec.OxideName(image))
 		if err == nil {
 			err = oc.ImageDelete(ctx, oxide.ImageDeleteParams{Image: oxide.NameOrId(cur.Id)})
 		}
 		if err != nil && !errors.Is(err, oxide.ErrObjectNotFound) {
-			return ctrl.Result{}, reconcile.TerminalError(oxideclient.ShortError(err))
+			return reconcile.TerminalError(oxideclient.ShortError(err))
 		}
 		log.FromContext(ctx).Info("Deleted Oxide image")
 		record(r.Recorder, image, nil, "Deleted", "Deleted Oxide image")
 	}
 	controllerutil.RemoveFinalizer(image, finalizerName)
-	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, image))
+	return client.IgnoreNotFound(r.Update(ctx, image))
 }
 
 // SetupWithManager sets up the controller with the Manager.

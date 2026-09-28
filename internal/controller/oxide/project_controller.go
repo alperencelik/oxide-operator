@@ -56,8 +56,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	log.FromContext(ctx).Info("Reconciling Project")
 	if !project.DeletionTimestamp.IsZero() {
-		res, err := r.handleDelete(ctx, project)
-		return res, warn(r.Recorder, project, "DeleteFailed", err)
+		return ctrl.Result{}, warn(r.Recorder, project, "DeleteFailed", r.handleDelete(ctx, project))
 	}
 	if err := r.handleFinalizer(ctx, project); err != nil {
 		return ctrl.Result{}, err
@@ -112,14 +111,14 @@ func (r *ProjectReconciler) handleFinalizer(ctx context.Context, project *oxidev
 }
 
 // handleDelete deletes the Oxide project, unless protected, and removes the finalizer.
-func (r *ProjectReconciler) handleDelete(ctx context.Context, project *oxidev1alpha1.Project) (ctrl.Result, error) {
+func (r *ProjectReconciler) handleDelete(ctx context.Context, project *oxidev1alpha1.Project) error {
 	if !controllerutil.ContainsFinalizer(project, finalizerName) {
-		return ctrl.Result{}, nil
+		return nil
 	}
 	if !project.Spec.DeletionProtection {
 		oc, err := oxideclient.NewClientFromRef(ctx, r.Client, project.Spec.ConnectionRef.Name)
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 		name := oxide.NameOrId(project.Name)
 		// Oxide creates a "default" VPC with every project and won't delete a project that still has VPCs.
@@ -128,13 +127,13 @@ func (r *ProjectReconciler) handleDelete(ctx context.Context, project *oxidev1al
 			err = oc.ProjectDelete(ctx, oxide.ProjectDeleteParams{Project: name})
 		}
 		if err != nil && !errors.Is(err, oxide.ErrObjectNotFound) {
-			return ctrl.Result{}, oxideclient.ShortError(err)
+			return oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide project")
 		record(r.Recorder, project, nil, "Deleted", "Deleted Oxide project")
 	}
 	controllerutil.RemoveFinalizer(project, finalizerName)
-	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, project))
+	return client.IgnoreNotFound(r.Update(ctx, project))
 }
 
 // SetupWithManager sets up the controller with the Manager.

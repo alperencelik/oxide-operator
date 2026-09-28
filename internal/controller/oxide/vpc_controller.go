@@ -58,8 +58,7 @@ func (r *VpcReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 	log.FromContext(ctx).Info("Reconciling Vpc")
 	if !vpc.DeletionTimestamp.IsZero() {
-		res, err := r.handleDelete(ctx, vpc)
-		return res, warn(r.Recorder, vpc, "DeleteFailed", err)
+		return ctrl.Result{}, warn(r.Recorder, vpc, "DeleteFailed", r.handleDelete(ctx, vpc))
 	}
 	if err := r.handleFinalizer(ctx, vpc); err != nil {
 		return ctrl.Result{}, err
@@ -124,24 +123,24 @@ func (r *VpcReconciler) handleFinalizer(ctx context.Context, vpc *oxidev1alpha1.
 }
 
 // handleDelete deletes the Oxide VPC, unless protected, and removes the finalizer.
-func (r *VpcReconciler) handleDelete(ctx context.Context, vpc *oxidev1alpha1.Vpc) (ctrl.Result, error) {
+func (r *VpcReconciler) handleDelete(ctx context.Context, vpc *oxidev1alpha1.Vpc) error {
 	if !controllerutil.ContainsFinalizer(vpc, finalizerName) {
-		return ctrl.Result{}, nil
+		return nil
 	}
 	if !vpc.Spec.DeletionProtection {
 		oc, err := oxideclient.NewClientFromRef(ctx, r.Client, vpc.Spec.ConnectionRef.Name)
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 		err = deleteVpc(ctx, oc, oxide.NameOrId(vpc.Spec.ProjectName()), oxide.NameOrId(vpc.Spec.OxideName(vpc)))
 		if err != nil && !errors.Is(err, oxide.ErrObjectNotFound) {
-			return ctrl.Result{}, oxideclient.ShortError(err)
+			return oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide VPC")
 		record(r.Recorder, vpc, nil, "Deleted", "Deleted Oxide VPC")
 	}
 	controllerutil.RemoveFinalizer(vpc, finalizerName)
-	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, vpc))
+	return client.IgnoreNotFound(r.Update(ctx, vpc))
 }
 
 // deleteVpc deletes a VPC together with the "default" subnet Oxide creates in every VPC,

@@ -58,8 +58,7 @@ func (r *VpcSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	log.FromContext(ctx).Info("Reconciling VpcSubnet")
 	if !subnet.DeletionTimestamp.IsZero() {
-		res, err := r.handleDelete(ctx, subnet)
-		return res, warn(r.Recorder, subnet, "DeleteFailed", err)
+		return ctrl.Result{}, warn(r.Recorder, subnet, "DeleteFailed", r.handleDelete(ctx, subnet))
 	}
 	if err := r.handleFinalizer(ctx, subnet); err != nil {
 		return ctrl.Result{}, err
@@ -122,32 +121,32 @@ func (r *VpcSubnetReconciler) handleFinalizer(ctx context.Context, subnet *oxide
 }
 
 // handleDelete deletes the Oxide subnet, unless protected, and removes the finalizer.
-func (r *VpcSubnetReconciler) handleDelete(ctx context.Context, subnet *oxidev1alpha1.VpcSubnet) (ctrl.Result, error) {
+func (r *VpcSubnetReconciler) handleDelete(ctx context.Context, subnet *oxidev1alpha1.VpcSubnet) error {
 	if !controllerutil.ContainsFinalizer(subnet, finalizerName) {
-		return ctrl.Result{}, nil
+		return nil
 	}
 	if !subnet.Spec.DeletionProtection {
 		oc, err := oxideclient.NewClientFromRef(ctx, r.Client, subnet.Spec.ConnectionRef.Name)
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 		// Delete by ID when known, so a deleted Vpc object doesn't block deleting its subnets.
 		params := oxide.VpcSubnetDeleteParams{Subnet: oxide.NameOrId(subnet.Status.ID)}
 		if subnet.Status.ID == "" {
 			params.Subnet = oxide.NameOrId(subnet.Spec.OxideName(subnet))
 			if params.Project, params.Vpc, err = r.subnetVpc(ctx, subnet, false); err != nil {
-				return ctrl.Result{}, err
+				return err
 			}
 		}
 		err = oc.VpcSubnetDelete(ctx, params)
 		if err != nil && !errors.Is(err, oxide.ErrObjectNotFound) {
-			return ctrl.Result{}, oxideclient.ShortError(err)
+			return oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide subnet")
 		record(r.Recorder, subnet, nil, "Deleted", "Deleted Oxide subnet")
 	}
 	controllerutil.RemoveFinalizer(subnet, finalizerName)
-	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, subnet))
+	return client.IgnoreNotFound(r.Update(ctx, subnet))
 }
 
 // subnetVpc returns the Oxide project and VPC of a subnet, from spec.vpc or the Vpc that spec.vpcRef

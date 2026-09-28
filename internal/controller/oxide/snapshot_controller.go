@@ -57,8 +57,7 @@ func (r *SnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 	log.FromContext(ctx).Info("Reconciling Snapshot")
 	if !snapshot.DeletionTimestamp.IsZero() {
-		res, err := r.handleDelete(ctx, snapshot)
-		return res, warn(r.Recorder, snapshot, "DeleteFailed", err)
+		return ctrl.Result{}, warn(r.Recorder, snapshot, "DeleteFailed", r.handleDelete(ctx, snapshot))
 	}
 	if err := r.handleFinalizer(ctx, snapshot); err != nil {
 		return ctrl.Result{}, err
@@ -113,26 +112,26 @@ func (r *SnapshotReconciler) handleFinalizer(ctx context.Context, snapshot *oxid
 }
 
 // handleDelete deletes the Oxide snapshot, unless protected, and removes the finalizer.
-func (r *SnapshotReconciler) handleDelete(ctx context.Context, snapshot *oxidev1alpha1.Snapshot) (ctrl.Result, error) {
+func (r *SnapshotReconciler) handleDelete(ctx context.Context, snapshot *oxidev1alpha1.Snapshot) error {
 	if !controllerutil.ContainsFinalizer(snapshot, finalizerName) {
-		return ctrl.Result{}, nil
+		return nil
 	}
 	if !snapshot.Spec.DeletionProtection {
 		oc, err := oxideclient.NewClientFromRef(ctx, r.Client, snapshot.Spec.ConnectionRef.Name)
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 		err = oc.SnapshotDelete(ctx, oxide.SnapshotDeleteParams{
 			Project: oxide.NameOrId(snapshot.Spec.ProjectName()), Snapshot: oxide.NameOrId(snapshot.Spec.OxideName(snapshot)),
 		})
 		if err != nil && !errors.Is(err, oxide.ErrObjectNotFound) {
-			return ctrl.Result{}, oxideclient.ShortError(err)
+			return oxideclient.ShortError(err)
 		}
 		log.FromContext(ctx).Info("Deleted Oxide snapshot")
 		record(r.Recorder, snapshot, nil, "Deleted", "Deleted Oxide snapshot")
 	}
 	controllerutil.RemoveFinalizer(snapshot, finalizerName)
-	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, snapshot))
+	return client.IgnoreNotFound(r.Update(ctx, snapshot))
 }
 
 // SetupWithManager sets up the controller with the Manager.
